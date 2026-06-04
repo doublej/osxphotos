@@ -291,18 +291,31 @@ class FaceInfo:
 
         return MPRI_Reg_Rect(x, y, h, w)
 
-    def face_rect(self):
+    def face_rect(self, oriented=False):
         """Get face rectangle coordinates for current version of the associated image
             If image has been edited, rectangle applies to edited version, otherwise original version
             Coordinates in format and reference frame used by PIL
 
+        Arguments:
+            oriented: if True, return the rectangle for the orientation-corrected
+                (upright/display) image -- e.g. the result of ImageOps.exif_transpose(),
+                a HEIC opened with pillow-heif, or a file produced by `osxphotos export`.
+                If False (default), return the rectangle for the original, un-rotated
+                pixel buffer returned by PIL.Image.open() on the original file.
+
         Returns:
-            list [(x0, x1), (y0, y1)] of coordinates in reference frame used by PIL
+            list [(x0, y0), (x1, y1)] of coordinates in reference frame used by PIL
+
+        Note:
+            PIL.Image.open() does not apply EXIF orientation, so for a rotated JPEG the
+            default (oriented=False) coordinates match the original as opened. HEIC files
+            are decoded upright by pillow-heif and exported files are written upright, so
+            pass oriented=True when drawing on those.
         """
         photo = self.photo
         size_reference = photo.width if photo.width > photo.height else photo.height
         radius = (self.size / 2) * size_reference
-        x, y = self._make_point((self.center_x, self.center_y))
+        x, y = self._make_point((self.center_x, self.center_y), oriented=oriented)
         x0, y0 = x - radius, y - radius
         x1, y1 = x + radius, y + radius
         return [(x0, y0), (x1, y1)]
@@ -374,18 +387,32 @@ class FaceInfo:
 
         return (x, y)
 
-    def _make_point(self, xy):
+    def _make_point(self, xy, oriented=False):
         """Translate an (x, y) tuple based on image orientation
             and convert to image coordinates
 
         Arguments:
             xy: tuple of (x, y) coordinates for point to translate
                 in format used by Photos (percent of height/width)
+            oriented: if True, return coordinates for the orientation-corrected
+                (upright/display) version of the image -- the pixel buffer produced by
+                ImageOps.exif_transpose(), pillow-heif's HEIC decode, or `osxphotos
+                export`. If False (default), return coordinates for the original,
+                un-rotated pixel buffer returned by PIL.Image.open() on the original
+                file (the historical behavior).
 
         Returns:
             (x, y) tuple of translated coordinates in pixels in PIL format/reference frame
         """
         # Reference: https://github.com/neilpa/phace/blob/7594776480505d0c389688a42099c94ac5d34f3f/cmd/phace/draw.go#L79-L94
+
+        if oriented:
+            # photo.width/height are already orientation-corrected (the upright/display
+            # dimensions), so no rotation or dimension-swap is needed here. Photos stores
+            # the face center relative to the upright image with the origin at the
+            # bottom-left; convert to PIL's top-left origin with a single y-flip.
+            x, y = xy
+            return (int(x * self.photo.width), int((1.0 - y) * self.photo.height))
 
         orientation = self.photo.orientation
         x, y = self._fix_orientation(xy)

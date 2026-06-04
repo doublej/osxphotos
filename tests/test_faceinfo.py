@@ -4120,3 +4120,64 @@ def test_faceinfo_v4_no_face(photosdb4):
     """Test FaceInfo on image with no faces"""
     photo = photosdb4.get_photo(UUID_NO_FACE_4)
     assert photo.face_info == []
+
+
+def _photo_by_name(photosdb, name):
+    """Return the single photo in photosdb whose original_filename matches name"""
+    photos = [p for p in photosdb.photos() if p.original_filename == name]
+    assert len(photos) == 1, f"expected exactly one {name}, got {len(photos)}"
+    return photos[0]
+
+
+def test_faceinfo_v5_oriented_equals_default_for_orientation1(photosdb5):
+    """For an un-rotated (orientation 1) image, face_rect(oriented=True) is identical
+    to the default face_rect() -- the oriented path only changes rotated images."""
+    photo = _photo_by_name(photosdb5, "Landscape_1.jpg")
+    assert photo.orientation == 1
+    for face in photo.face_info:
+        assert face.face_rect(oriented=True) == face.face_rect()
+        assert face.face_rect(oriented=False) == face.face_rect()
+
+
+def test_faceinfo_v5_oriented_differs_for_rotated(photosdb5):
+    """For a rotated image (orientation 6), the oriented rectangle differs from the
+    default and equals the value computed directly against the upright dimensions."""
+    photo = _photo_by_name(photosdb5, "portrait_6.jpg")
+    assert photo.orientation == 6
+    face = photo.face_info[0]
+
+    assert face.face_rect(oriented=True) != face.face_rect()
+
+    # Photos stores the center relative to the upright image (origin bottom-left);
+    # the oriented rectangle is centered on (center_x * width, (1 - center_y) * height).
+    expected_x = face.center_x * photo.width
+    expected_y = (1 - face.center_y) * photo.height
+    (x0, y0), (x1, y1) = face.face_rect(oriented=True)
+    assert abs((x0 + x1) / 2 - expected_x) <= 1
+    assert abs((y0 + y1) / 2 - expected_y) <= 1
+
+
+def test_faceinfo_v5_oriented_consistent_across_orientations(photosdb5):
+    """The portrait_N fixtures are the same scene encoded in every EXIF orientation.
+    face_rect(oriented=True) must map them all to the same upright location, proving
+    the oriented coordinates are orientation-independent (the whole point of the flag).
+    """
+    photos = [
+        p
+        for p in photosdb5.photos()
+        if p.original_filename.startswith("portrait_") and p.face_info
+    ]
+    # fixtures cover orientations 1-8 (orientation 1 appears twice: portrait_0/portrait_1)
+    assert len({p.orientation for p in photos}) == 8
+
+    centers = []
+    for p in photos:
+        assert len(p.face_info) == 1
+        (x0, y0), (x1, y1) = p.face_info[0].face_rect(oriented=True)
+        centers.append(((x0 + x1) / 2, (y0 + y1) / 2))
+
+    xs = [c[0] for c in centers]
+    ys = [c[1] for c in centers]
+    # all variants should agree within a small tolerance (rounding + minor fixture diffs)
+    assert max(xs) - min(xs) <= 40
+    assert max(ys) - min(ys) <= 40
