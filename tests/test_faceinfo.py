@@ -4089,6 +4089,10 @@ def test_faceinfo_v5(photosdb5, uuid_dict):
             for key in face_dict:
                 if key == "yaw":
                     continue  # yaw set to 0 as it's not in Ventura
+                if key == "face_rect_oriented":
+                    # not in the saved test data; verify against the method instead
+                    assert face_dict[key] == face.face_rect(oriented=True)
+                    continue
                 assert face_dict[key] == uuid_dict[uuid][face.uuid][key]
 
 
@@ -4113,6 +4117,10 @@ def test_faceinfo_v4(photosdb4, uuid_dict):
             # and I didn't want to regenerate all the test data (e.g.eye, mouth coordinates)
             face_dict = face.asdict()
             for key in face_dict:
+                if key == "face_rect_oriented":
+                    # not in the saved test data; verify against the method instead
+                    assert face_dict[key] == face.face_rect(oriented=True)
+                    continue
                 assert face_dict[key] == uuid_dict[uuid][face.uuid][key]
 
 

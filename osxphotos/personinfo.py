@@ -458,6 +458,7 @@ class FaceInfo:
             "center": self.center,
             "size": self.size,
             "face_rect": self.face_rect(),
+            "face_rect_oriented": self.face_rect(oriented=True),
             "mpri_reg_rect": self.mpri_reg_rect._asdict(),
             "mwg_rs_area": self.mwg_rs_area._asdict(),
             "roll": roll,
